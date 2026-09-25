@@ -100,7 +100,8 @@ public class MainActivity extends Activity {
         ListView list=new ListView(this); box.addView(list,new LinearLayout.LayoutParams(-1,0,1));
         Dialog dialog=new AlertDialog.Builder(this).setTitle(type.equals("BLACKLIST")?"Blacklist":"Whitelist").setView(box).create();
 
-        Runnable reload=()->{
+        final Runnable[] reload=new Runnable[1];
+        reload[0]=()->{
             ArrayList<DatabaseHelper.Rule> data=db.getRules(type,search.getText().toString().trim());
             ArrayAdapter<String> a=new ArrayAdapter<String>(this,android.R.layout.simple_list_item_2,android.R.id.text1){
                 @Override public View getView(int p,View cv,android.view.ViewGroup parent){
@@ -121,7 +122,7 @@ public class MainActivity extends Activity {
                         if(which==0) db.setRuleEnabled(r.id,!r.enabled);
                         else if(which==1) db.deleteRule(r.id);
                         else { db.addRule(r.value,"WHITELIST"); }
-                        reload.run(); refresh();
+                        reload[0].run(); refresh();
                     }).show();
             });
         };
@@ -130,7 +131,7 @@ public class MainActivity extends Activity {
             public void onTextChanged(CharSequence s,int st,int before,int count){reload.run();}
             public void afterTextChanged(android.text.Editable e){}
         });
-        reload.run();
+        reload[0].run();
         dialog.show();
     }
 
