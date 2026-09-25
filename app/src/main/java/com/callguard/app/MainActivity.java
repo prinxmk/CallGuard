@@ -128,7 +128,7 @@ public class MainActivity extends Activity {
         };
         search.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence s,int st,int c,int a){}
-            public void onTextChanged(CharSequence s,int st,int before,int count){reload.run();}
+            public void onTextChanged(CharSequence s,int st,int before,int count){reload[0].run();}
             public void afterTextChanged(android.text.Editable e){}
         });
         reload[0].run();
