@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
             com.callguard.app.Settings.setBlockUnknown(this,checked);
         });
 
-        findViewById(R.id.btnEnable).setOnClickListener(v->requestScreeningRole());
+        findViewById(R.id.btnEnable).setOnClickListener(v->requestScreeningAccess());
         findViewById(R.id.btnAddBlacklist).setOnClickListener(v->showAddDialog("BLACKLIST"));
         findViewById(R.id.btnBlacklist).setOnClickListener(v->showRules("BLACKLIST"));
         findViewById(R.id.btnWhitelist).setOnClickListener(v->showRules("WHITELIST"));
@@ -44,36 +44,67 @@ public class MainActivity extends Activity {
         findViewById(R.id.btnTest).setOnClickListener(v->showTestDialog());
         findViewById(R.id.btnExport).setOnClickListener(v->exportRules());
         findViewById(R.id.btnImport).setOnClickListener(v->importRules());
-
         refresh();
     }
 
     @Override protected void onResume(){super.onResume(); if(db!=null) refresh();}
 
-    private void refresh(){
-        boolean active=false;
+    private boolean isCallGuardActive(){
+        TelecomManager tm=(TelecomManager)getSystemService(TELECOM_SERVICE);
         if(Build.VERSION.SDK_INT>=29){
             RoleManager rm=getSystemService(RoleManager.class);
-            active=rm!=null && rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING);
+            return rm!=null && rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING);
         }
-        status.setText(active ? "● Protection is ON" : "● Protection is OFF — enable Call Screening");
+        return tm!=null && getPackageName().equals(tm.getDefaultDialerPackage());
+    }
+
+    private void refresh(){
+        boolean active=isCallGuardActive();
+        String message;
+        if(Build.VERSION.SDK_INT>=29)
+            message=active ? "● Protection is ON" : "● Protection is OFF — enable CallGuard screening";
+        else
+            message=active ? "● Protection is ON — Android 9 mode" : "● Protection is OFF — make CallGuard the default Phone app";
+        status.setText(message);
         status.setTextColor(getResources().getColor(active?R.color.green:R.color.red));
         counts.setText("Blacklist: "+db.countRules("BLACKLIST")+
                 "    Whitelist: "+db.countRules("WHITELIST")+
                 "    Blocked: "+db.countBlocked());
     }
 
-    private void requestScreeningRole(){
+    private void requestScreeningAccess(){
         if(Build.VERSION.SDK_INT>=29){
             RoleManager rm=getSystemService(RoleManager.class);
             if(rm!=null && rm.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING)){
                 startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING),100);
                 return;
             }
+            openPhoneSettings();
+            return;
         }
-        new AlertDialog.Builder(this).setTitle("Call screening unavailable")
-            .setMessage("This Android version/device does not expose the Call Screening role.")
-            .setPositiveButton("OK",null).show();
+
+        // Android 9 (API 28) has no RoleManager. The platform screening service is
+        // tied to the selected default dialer, so ask the user to make CallGuard
+        // the default Phone app. The app includes an ACTION_DIAL activity and
+        // InCallService so it can operate as a dialer on these devices.
+        TelecomManager tm=(TelecomManager)getSystemService(TELECOM_SERVICE);
+        if(tm!=null && getPackageName().equals(tm.getDefaultDialerPackage())){
+            refresh();
+            toast("CallGuard is already the default Phone app");
+            return;
+        }
+        try{
+            Intent i=new Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER);
+            i.putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME,getPackageName());
+            startActivityForResult(i,110);
+        }catch(Exception e){
+            openPhoneSettings();
+        }
+    }
+
+    private void openPhoneSettings(){
+        try{ startActivity(new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)); }
+        catch(Exception e){ startActivity(new Intent(Settings.ACTION_SETTINGS)); }
     }
 
     private void showAddDialog(String type){
@@ -94,7 +125,6 @@ public class MainActivity extends Activity {
     }
 
     private void showRules(String type){
-        final ArrayList<DatabaseHelper.Rule> rules=db.getRules(type,"");
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(20,10,20,10);
         EditText search=new EditText(this); search.setHint("Search"); box.addView(search);
         ListView list=new ListView(this); box.addView(list,new LinearLayout.LayoutParams(-1,0,1));
@@ -121,7 +151,7 @@ public class MainActivity extends Activity {
                     .setItems(new String[]{r.enabled?"Disable":"Enable","Delete","Add to Whitelist"},(di,which)->{
                         if(which==0) db.setRuleEnabled(r.id,!r.enabled);
                         else if(which==1) db.deleteRule(r.id);
-                        else { db.addRule(r.value,"WHITELIST"); }
+                        else db.addRule(r.value,"WHITELIST");
                         reload[0].run(); refresh();
                     }).show();
             });
@@ -159,33 +189,23 @@ public class MainActivity extends Activity {
     }
 
     private void exportRules(){
-        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
-        i.setType("text/csv");
-        i.putExtra(Intent.EXTRA_TITLE,"callguard_rules.csv");
-        startActivityForResult(i,701);
+        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT); i.setType("text/csv"); i.putExtra(Intent.EXTRA_TITLE,"callguard_rules.csv"); startActivityForResult(i,701);
     }
-
     private void importRules(){
-        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        i.setType("text/*");
-        i.addCategory(Intent.CATEGORY_OPENABLE);
-        startActivityForResult(i,702);
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("text/*"); i.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(i,702);
     }
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==100 || requestCode==110){refresh(); return;}
         if(resultCode!=RESULT_OK || data==null) return;
-        if(requestCode==100){ refresh(); return; }
-
         if(requestCode==701){
-            try(OutputStream out=getContentResolver().openOutputStream(data.getData());
-                PrintWriter pw=new PrintWriter(out)){
+            try(OutputStream out=getContentResolver().openOutputStream(data.getData()); PrintWriter pw=new PrintWriter(out)){
                 pw.println("type,value,enabled");
-                for(DatabaseHelper.Rule r:db.getAllRules())
-                    pw.println(r.type+","+r.value+","+(r.enabled?1:0));
+                for(DatabaseHelper.Rule r:db.getAllRules()) pw.println(r.type+","+r.value+","+(r.enabled?1:0));
                 toast("Rules exported");
             }catch(Exception e){toast("Export failed: "+e.getMessage());}
-        } else if(requestCode==702){
+        }else if(requestCode==702){
             int added=0;
             try(BufferedReader br=new BufferedReader(new InputStreamReader(getContentResolver().openInputStream(data.getData())))){
                 String line; boolean first=true;
@@ -193,17 +213,13 @@ public class MainActivity extends Activity {
                     if(first){first=false;continue;}
                     String[] a=line.split(",");
                     if(a.length>=2){
-                        String type=a[0].trim();
-                        String value=NumberUtils.normalize(a[1]);
-                        if((type.equals("PREFIX")||type.equals("EXACT")||type.equals("WHITELIST")) &&
-                                !value.isEmpty() && db.addRule(value,type)) added++;
+                        String t=a[0].trim(), value=NumberUtils.normalize(a[1]);
+                        if((t.equals("PREFIX")||t.equals("EXACT")||t.equals("WHITELIST"))&&!value.isEmpty()&&db.addRule(value,t)) added++;
                     }
                 }
-                toast("Imported "+added+" new rules");
-                refresh();
+                toast("Imported "+added+" new rules"); refresh();
             }catch(Exception e){toast("Import failed: "+e.getMessage());}
         }
     }
-
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
 }

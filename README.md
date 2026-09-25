@@ -64,3 +64,11 @@ On Android 10+ the app can request the `ROLE_CALL_SCREENING` role directly.
 On older supported Android versions, the user may need to select CallGuard through the device's Phone/Default-app or caller-ID/spam settings, depending on the manufacturer.
 
 The "Block unknown callers" option requests Contacts access because the app must determine whether an incoming number is saved in the user's contacts. If Contacts permission is denied, unknown-caller blocking cannot reliably distinguish saved from unsaved numbers.
+
+## Android 9 / Infinix compatibility mode
+
+CallGuard now has a dedicated Android 7–9 path. Android 9 does not provide the Android 10 `ROLE_CALL_SCREENING` API, so the Enable button uses the Android 9 default-dialer flow instead. CallGuard declares an ACTION_DIAL activity and an InCallService, and asks Android to make CallGuard the default Phone app. Once selected, the existing CallScreeningService performs the blacklist/prefix/whitelist screening.
+
+Android 10+ continues to use the native Call Screening role.
+
+Important: Android 9 manufacturer software can present the default-phone selection UI differently. The app can request the standard Android default-dialer dialog, but the exact Infinix/XOS wording and location are controlled by the device software.
