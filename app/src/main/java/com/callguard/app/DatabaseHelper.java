@@ -36,7 +36,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public ArrayList<Rule> getRules(String type, String search) {
         ArrayList<Rule> out=new ArrayList<>();
-        Cursor c=getReadableDatabase().query("rules",null,"type=? AND value LIKE ?",new String[]{type,"%"+search+"%"},"id DESC");
+        Cursor c=getReadableDatabase().query("rules",null,"type=? AND value LIKE ?",new String[]{type,"%"+search+"%"},null,null,"id DESC");
         while(c.moveToNext()) out.add(new Rule(c.getLong(c.getColumnIndexOrThrow("id")),c.getString(c.getColumnIndexOrThrow("value")),c.getString(c.getColumnIndexOrThrow("type")),c.getInt(c.getColumnIndexOrThrow("enabled"))==1));
         c.close(); return out;
     }
