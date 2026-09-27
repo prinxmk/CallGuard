@@ -44,6 +44,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.btnTest).setOnClickListener(v->showTestDialog());
         findViewById(R.id.btnExport).setOnClickListener(v->exportRules());
         findViewById(R.id.btnImport).setOnClickListener(v->importRules());
+        findViewById(R.id.btnDiagnostics).setOnClickListener(v->showDiagnostics());
         refresh();
     }
 
@@ -79,32 +80,55 @@ public class MainActivity extends Activity {
                 startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING),100);
                 return;
             }
-            openPhoneSettings();
+            showDiagnostics();
             return;
         }
 
-        // Android 9 (API 28) has no RoleManager. The platform screening service is
-        // tied to the selected default dialer, so ask the user to make CallGuard
-        // the default Phone app. The app includes an ACTION_DIAL activity and
-        // InCallService so it can operate as a dialer on these devices.
-        TelecomManager tm=(TelecomManager)getSystemService(TELECOM_SERVICE);
-        if(tm!=null && getPackageName().equals(tm.getDefaultDialerPackage())){
-            refresh();
-            toast("CallGuard is already the default Phone app");
-            return;
-        }
-        try{
-            Intent i=new Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER);
-            i.putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME,getPackageName());
-            startActivityForResult(i,110);
-        }catch(Exception e){
-            openPhoneSettings();
-        }
+        // Android 9 has CallScreeningService (API 24+) but does not expose
+        // RoleManager/ROLE_CALL_SCREENING (introduced in API 29). Do not
+        // silently replace the user's Phone app. Show the exact diagnostic
+        // state and available legacy path instead.
+        showDiagnostics();
     }
 
     private void openPhoneSettings(){
         try{ startActivity(new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)); }
         catch(Exception e){ startActivity(new Intent(Settings.ACTION_SETTINGS)); }
+    }
+
+    private void showDiagnostics(){
+        TelecomManager tm=(TelecomManager)getSystemService(TELECOM_SERVICE);
+        String defaultDialer=tm!=null ? tm.getDefaultDialerPackage() : null;
+        boolean isDefaultDialer=getPackageName().equals(defaultDialer);
+        boolean screeningServiceDeclared=false;
+        try{
+            android.content.Intent probe=new android.content.Intent("android.telecom.CallScreeningService");
+            probe.setPackage(getPackageName());
+            screeningServiceDeclared=getPackageManager().queryIntentServices(probe,0).size()>0;
+        }catch(Exception ignored){}
+
+        StringBuilder b=new StringBuilder();
+        b.append("Android version: ").append(Build.VERSION.RELEASE).append("\n");
+        b.append("API level: ").append(Build.VERSION.SDK_INT).append("\n\n");
+        b.append("CallScreeningService declared: ").append(screeningServiceDeclared?"YES":"NO").append("\n");
+        b.append("Call screening role API: ").append(Build.VERSION.SDK_INT>=29?"AVAILABLE":"NOT AVAILABLE on Android 9").append("\n");
+        b.append("Default Phone package: ").append(defaultDialer==null?"Unknown":defaultDialer).append("\n");
+        b.append("CallGuard is default Phone: ").append(isDefaultDialer?"YES":"NO").append("\n\n");
+
+        if(Build.VERSION.SDK_INT<29){
+            b.append("Android 9 does not expose the public RoleManager call-screening selection API.\n\n");
+            b.append("CallGuard's screening service is installed, but this diagnostic cannot claim that XOS has selected it as the active third-party screening provider.\n\n");
+            b.append("Your phone currently uses the system Phone app. We will not replace it automatically.\n\n");
+            b.append("Next test: place an incoming call after adding a test prefix. If this diagnostic records a screening callback, we can confirm the service is active on this XOS build.");
+        }else{
+            b.append(isCallGuardActive()?"CallGuard currently holds the screening role.":"CallGuard does not currently hold the screening role.");
+        }
+
+        new AlertDialog.Builder(this).setTitle("CallGuard Diagnostics")
+            .setMessage(b.toString())
+            .setPositiveButton("OK",null)
+            .setNeutralButton("Default Phone Settings",(d,w)->openPhoneSettings())
+            .show();
     }
 
     private void showAddDialog(String type){

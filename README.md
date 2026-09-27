@@ -72,3 +72,7 @@ CallGuard now has a dedicated Android 7–9 path. Android 9 does not provide the
 Android 10+ continues to use the native Call Screening role.
 
 Important: Android 9 manufacturer software can present the default-phone selection UI differently. The app can request the standard Android default-dialer dialog, but the exact Infinix/XOS wording and location are controlled by the device software.
+
+## V2.1 Android 9 diagnostics
+
+This build adds an Android 9 diagnostic screen. Android's public `ROLE_CALL_SCREENING` API was introduced in API 29, while `CallScreeningService` exists from API 24. On Android 9 the app therefore does not claim that it can select itself as the screening provider through RoleManager. The diagnostic reports the installed screening service, API level, and current default Phone package so testing on manufacturer-specific Android 9 builds can be done without silently replacing the system dialer.
