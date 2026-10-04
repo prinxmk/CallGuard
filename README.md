@@ -76,3 +76,8 @@ Important: Android 9 manufacturer software can present the default-phone selecti
 ## V2.1 Android 9 diagnostics
 
 This build adds an Android 9 diagnostic screen. Android's public `ROLE_CALL_SCREENING` API was introduced in API 29, while `CallScreeningService` exists from API 24. On Android 9 the app therefore does not claim that it can select itself as the screening provider through RoleManager. The diagnostic reports the installed screening service, API level, and current default Phone package so testing on manufacturer-specific Android 9 builds can be done without silently replacing the system dialer.
+
+
+## Android 9 dialer eligibility patch (v1.2.2)
+
+The Android 9 compatibility build now declares the ACTION_DIAL intent with the `tel` URI scheme in addition to the generic ACTION_DIAL declaration. This improves compatibility with Android 9/OEM default-phone-app selection logic that identifies eligible dialer applications from the dial intent filter. Android's documented default phone requirements include ACTION_DIAL handling and a fully implemented InCallService.
