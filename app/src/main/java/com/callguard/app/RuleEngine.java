@@ -14,7 +14,7 @@ public final class RuleEngine {
             for (DatabaseHelper.Rule r : db.getRules("WHITELIST", "")) {
                 if (!r.enabled) continue;
                 String rule = NumberUtils.normalize(r.value);
-                if ("WHITELIST".equals(r.type) && rule.equals(number))
+                if (("WHITELIST".equals(r.type) || "LEGACY_WHITELIST".equals(r.type)) && rule.equals(number))
                     return new CallDecision(false, "Whitelisted number");
                 if ("WHITELIST_PREFIX".equals(r.type) && NumberUtils.isPrefixMatch(number, rule))
                     return new CallDecision(false, "Whitelisted prefix: " + r.value);
@@ -22,9 +22,9 @@ public final class RuleEngine {
             for (DatabaseHelper.Rule r : db.getRules("BLACKLIST", "")) {
                 if (!r.enabled) continue;
                 String rule = NumberUtils.normalize(r.value);
-                if ("EXACT".equals(r.type) && rule.equals(number))
+                if (("EXACT".equals(r.type) || "BLACKLIST".equals(r.type)) && rule.equals(number))
                     return new CallDecision(true, "Matched exact blacklist number: " + r.value);
-                if ("PREFIX".equals(r.type) && NumberUtils.isPrefixMatch(number, rule))
+                if (("PREFIX".equals(r.type)) && NumberUtils.isPrefixMatch(number, rule))
                     return new CallDecision(true, "Matched blacklist prefix: " + r.value);
             }
             if (Settings.blockUnknown(context) && !NumberUtils.isContact(context, number))

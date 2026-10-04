@@ -152,45 +152,70 @@ public class MainActivity extends Activity {
     private void showRules(String type){
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(20,10,20,10);
         LinearLayout actions=new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
-        EditText search=new EditText(this); search.setHint("Search number or prefix"); search.setSingleLine(true);
+        EditText search=new EditText(this); search.setHint("Search number or prefix"); search.setSingleLine(true); search.setInputType(android.text.InputType.TYPE_CLASS_PHONE);
         actions.addView(search,new LinearLayout.LayoutParams(0,-2,1));
         Button add=new Button(this); add.setText("Add"); actions.addView(add,new LinearLayout.LayoutParams(-2,-2));
         box.addView(actions);
-        ListView list=new ListView(this); box.addView(list,new LinearLayout.LayoutParams(-1,0,1));
-        Dialog dialog=new AlertDialog.Builder(this).setTitle(type.equals("BLACKLIST")?"Blacklist":"Whitelist").setView(box).create();
+        TextView empty=new TextView(this); empty.setText("No entries found."); empty.setGravity(Gravity.CENTER); empty.setPadding(10,30,10,30); empty.setVisibility(View.GONE); box.addView(empty);
+        ListView list=new ListView(this);
+        int listHeight=(int)(getResources().getDisplayMetrics().density*390);
+        box.addView(list,new LinearLayout.LayoutParams(-1,listHeight));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle(type.equals("BLACKLIST")?"Blacklist":"Whitelist").setView(box).setNegativeButton("Close",null).create();
         add.setOnClickListener(v->showAddDialog(type));
 
         final Runnable[] reload=new Runnable[1];
         reload[0]=()->{
             ArrayList<DatabaseHelper.Rule> data=db.getRules(type,search.getText().toString().trim());
-            ArrayAdapter<String> a=new ArrayAdapter<String>(this,android.R.layout.simple_list_item_2,android.R.id.text1){
-                @Override public View getView(int p,View cv,android.view.ViewGroup parent){
-                    View v=super.getView(p,cv,parent);
-                    TextView t=v.findViewById(android.R.id.text1); TextView s=v.findViewById(android.R.id.text2);
-                    DatabaseHelper.Rule r=data.get(p);
-                    t.setText(r.value+"  ["+r.type+"]"); s.setText(r.enabled?"Enabled":"Disabled"); return v;
+            empty.setVisibility(data.isEmpty()?View.VISIBLE:View.GONE);
+            list.setVisibility(data.isEmpty()?View.GONE:View.VISIBLE);
+            BaseAdapter adapter=new BaseAdapter(){
+                @Override public int getCount(){return data.size();}
+                @Override public Object getItem(int position){return data.get(position);}
+                @Override public long getItemId(int position){return data.get(position).id;}
+                @Override public View getView(int position,View convertView,android.view.ViewGroup parent){
+                    DatabaseHelper.Rule r=data.get(position);
+                    LinearLayout row=new LinearLayout(MainActivity.this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(10,12,4,12);
+                    LinearLayout info=new LinearLayout(MainActivity.this); info.setOrientation(LinearLayout.VERTICAL);
+                    TextView value=new TextView(MainActivity.this); value.setText(r.value); value.setTextSize(17); value.setTextColor(getResources().getColor(R.color.primary)); value.setTypeface(null,android.graphics.Typeface.BOLD);
+                    TextView meta=new TextView(MainActivity.this); meta.setText(ruleLabel(r)+" • "+(r.enabled?"Enabled":"Disabled"));
+                    info.addView(value); info.addView(meta); row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+                    Button toggle=new Button(MainActivity.this); toggle.setText(r.enabled?"Disable":"Enable");
+                    toggle.setOnClickListener(v->{db.setRuleEnabled(r.id,!r.enabled); reload[0].run(); refresh();});
+                    row.addView(toggle,new LinearLayout.LayoutParams(-2,-2));
+                    Button del=new Button(MainActivity.this); del.setText("Delete");
+                    del.setOnClickListener(v->new AlertDialog.Builder(MainActivity.this).setTitle("Delete rule?").setMessage(r.value+"\n\nThis cannot be undone.").setNegativeButton("Cancel",null).setPositiveButton("Delete",(d,w)->{db.deleteRule(r.id); reload[0].run(); refresh();}).show());
+                    row.addView(del,new LinearLayout.LayoutParams(-2,-2));
+                    row.setOnClickListener(v->showRuleActions(r,type,reload[0]));
+                    return row;
                 }
             };
-            list.setAdapter(a);
-            list.setOnItemClickListener((p,v,pos,id)->{
-                DatabaseHelper.Rule r=data.get(pos);
-                ArrayList<String> options=new ArrayList<>();
-                options.add(r.enabled?"Disable":"Enable"); options.add("Delete");
-                if(!r.type.startsWith("WHITELIST")) options.add("Add to Whitelist");
-                new AlertDialog.Builder(this).setTitle(r.value).setItems(options.toArray(new String[0]),(di,which)->{
-                    if(which==0) db.setRuleEnabled(r.id,!r.enabled);
-                    else if(which==1) db.deleteRule(r.id);
-                    else db.addRule(r.value,"PREFIX".equals(r.type)?"WHITELIST_PREFIX":"WHITELIST");
-                    reload[0].run(); refresh();
-                }).show();
-            });
+            list.setAdapter(adapter);
         };
         search.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence s,int st,int c,int a){}
             public void onTextChanged(CharSequence s,int st,int before,int count){reload[0].run();}
             public void afterTextChanged(android.text.Editable e){}
         });
-        reload[0].run(); dialog.show();
+        dialog.setOnShowListener(d->reload[0].run());
+        dialog.show();
+    }
+
+    private void showRuleActions(DatabaseHelper.Rule r,String listType,Runnable reload){
+        ArrayList<String> options=new ArrayList<>();
+        options.add(r.enabled?"Disable":"Enable");
+        options.add("Delete");
+        if(!r.type.startsWith("WHITELIST")) options.add("Add to Whitelist");
+        new AlertDialog.Builder(this).setTitle(r.value).setMessage(ruleLabel(r)).setItems(options.toArray(new String[0]),(di,which)->{
+            if(which==0) db.setRuleEnabled(r.id,!r.enabled);
+            else if(which==1) db.deleteRule(r.id);
+            else db.addRule(r.value, "PREFIX".equals(r.type)?"WHITELIST_PREFIX":"WHITELIST");
+            reload.run(); refresh();
+        }).show();
+    }
+
+    private String ruleLabel(DatabaseHelper.Rule r){
+        if("PREFIX".equals(r.type)||"WHITELIST_PREFIX".equals(r.type)) return "Prefix rule";
+        return "Exact number";
     }
 
     private void showHistory(){

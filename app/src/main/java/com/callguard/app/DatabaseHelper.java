@@ -7,7 +7,7 @@ import java.util.*;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "callguard.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
 
     public DatabaseHelper(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
@@ -33,12 +33,39 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 db.setTransactionSuccessful();
             } finally { db.endTransaction(); }
         }
+        if (oldVersion < 3) migrateLegacyRuleTypes(db);
+    }
+
+    private void migrateLegacyRuleTypes(SQLiteDatabase db) {
+        db.beginTransaction();
+        Cursor c = db.query("rules", new String[]{"id","value","type"},
+                "type IN (?,?)", new String[]{"BLACKLIST","WHITELIST"}, null, null, null);
+        try {
+            while (c.moveToNext()) {
+                long id = c.getLong(0);
+                String value = c.getString(1);
+                String old = c.getString(2);
+                String normalized = NumberUtils.normalize(value);
+                boolean prefix = normalized.length() < 10;
+                String replacement;
+                if ("WHITELIST".equals(old)) replacement = prefix ? "WHITELIST_PREFIX" : "WHITELIST";
+                else replacement = prefix ? "PREFIX" : "EXACT";
+                ContentValues v = new ContentValues();
+                v.put("value", normalized.isEmpty() ? value : normalized);
+                v.put("type", replacement);
+                try { db.update("rules", v, "id=?", new String[]{String.valueOf(id)}); }
+                catch (Exception ignored) {}
+            }
+            db.setTransactionSuccessful();
+        } finally { c.close(); db.endTransaction(); }
     }
 
     public boolean addRule(String value, String type) {
+        String normalized = NumberUtils.normalize(value);
+        if (normalized.isEmpty()) return false;
         SQLiteDatabase db=getWritableDatabase();
         ContentValues v=new ContentValues();
-        v.put("value", value); v.put("type", type); v.put("enabled",1); v.put("created_at",System.currentTimeMillis());
+        v.put("value", normalized); v.put("type", type); v.put("enabled",1); v.put("created_at",System.currentTimeMillis());
         return db.insertWithOnConflict("rules",null,v,SQLiteDatabase.CONFLICT_IGNORE)!=-1;
     }
 
@@ -57,13 +84,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         if(local234.startsWith("234") && local234.length()>3) local234="0"+local234.substring(3);
         String where; String[] args;
         if ("BLACKLIST".equals(type)) {
-            where="type IN (?,?)";
-            if(q.isEmpty()) args=new String[]{"PREFIX","EXACT"};
-            else { where += " AND (value LIKE ? OR value LIKE ? OR value LIKE ?)"; args=new String[]{"PREFIX","EXACT","%"+q+"%","%"+normalized+"%","%"+local234+"%"}; }
+            where="type IN (?,?,?)";
+            if(q.isEmpty()) args=new String[]{"PREFIX","EXACT","BLACKLIST"};
+            else { where += " AND (value LIKE ? OR value LIKE ? OR value LIKE ?)"; args=new String[]{"PREFIX","EXACT","BLACKLIST","%"+q+"%","%"+normalized+"%","%"+local234+"%"}; }
         } else if ("WHITELIST".equals(type)) {
-            where="type IN (?,?)";
-            if(q.isEmpty()) args=new String[]{"WHITELIST","WHITELIST_PREFIX"};
-            else { where += " AND (value LIKE ? OR value LIKE ? OR value LIKE ?)"; args=new String[]{"WHITELIST","WHITELIST_PREFIX","%"+q+"%","%"+normalized+"%","%"+local234+"%"}; }
+            where="type IN (?,?,?)";
+            if(q.isEmpty()) args=new String[]{"WHITELIST","WHITELIST_PREFIX","LEGACY_WHITELIST"};
+            else { where += " AND (value LIKE ? OR value LIKE ? OR value LIKE ?)"; args=new String[]{"WHITELIST","WHITELIST_PREFIX","LEGACY_WHITELIST","%"+q+"%","%"+normalized+"%","%"+local234+"%"}; }
         } else {
             where="type=?";
             if(q.isEmpty()) args=new String[]{type};
@@ -94,22 +121,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public int countRules(String type) {
-        Cursor c;
-        if ("BLACKLIST".equals(type)) {
-            // Blacklist entries are stored as PREFIX or EXACT.
-            c=getReadableDatabase().rawQuery(
-                "SELECT COUNT(*) FROM rules WHERE type IN (?,?)",
-                new String[]{"PREFIX","EXACT"});
-        } else if ("WHITELIST".equals(type)) {
-            c=getReadableDatabase().rawQuery(
-                "SELECT COUNT(*) FROM rules WHERE type IN (?,?)",
-                new String[]{"WHITELIST","WHITELIST_PREFIX"});
-        } else {
-            c=getReadableDatabase().rawQuery(
-                "SELECT COUNT(*) FROM rules WHERE type=?",
-                new String[]{type});
-        }
-        c.moveToFirst(); int n=c.getInt(0); c.close(); return n;
+        String[] types = "BLACKLIST".equals(type)
+                ? new String[]{"PREFIX","EXACT","BLACKLIST"}
+                : new String[]{"WHITELIST","WHITELIST_PREFIX","LEGACY_WHITELIST"};
+        StringBuilder q=new StringBuilder("SELECT COUNT(*) FROM rules WHERE type IN (");
+        for(int i=0;i<types.length;i++){ if(i>0) q.append(","); q.append("?"); }
+        q.append(")");
+        Cursor c=getReadableDatabase().rawQuery(q.toString(),types); c.moveToFirst(); int n=c.getInt(0); c.close(); return n;
     }
 
     public int countBlocked() {

@@ -5,25 +5,38 @@ import android.telecom.CallScreeningService;
 
 public class CallScreeningServiceImpl extends CallScreeningService {
     @Override public void onScreenCall(Call.Details details) {
-        if (details == null || details.getCallDirection() != Call.Details.DIRECTION_INCOMING) return;
+        if (details == null) return;
+        if (details.getCallDirection() != Call.Details.DIRECTION_INCOMING) return;
+
         String number = "";
         try {
             if (details.getHandle() != null) number = details.getHandle().getSchemeSpecificPart();
-            CallDecision d = RuleEngine.decide(getApplicationContext(), number);
-            if (d.block) {
-                try { new DatabaseHelper(getApplicationContext()).logBlocked(NumberUtils.normalize(number), d.reason); } catch (Exception ignored) {}
-            }
+        } catch (Exception ignored) {}
+
+        CallDecision decision;
+        try {
+            decision = RuleEngine.decide(getApplicationContext(), number);
+        } catch (Throwable ignored) {
+            decision = new CallDecision(false, "Safe fallback: call allowed");
+        }
+
+        boolean block = decision != null && decision.block;
+        try {
             CallScreeningService.CallResponse response = new CallScreeningService.CallResponse.Builder()
-                .setDisallowCall(d.block)
-                .setRejectCall(d.block)
-                .setSkipNotification(d.block)
-                .build();
+                    .setDisallowCall(block)
+                    .setRejectCall(block)
+                    .setSkipNotification(block)
+                    .build();
             respondToCall(details, response);
-        } catch (Exception e) {
-            // Telecom must always receive a response; never let an exception kill screening.
+        } catch (Throwable ignored) {
+            // Never allow an application exception to escape the telecom callback.
+        }
+
+        // Logging is deliberately after the telecom response so it cannot delay/crash screening.
+        if (block) {
             try {
-                respondToCall(details, new CallScreeningService.CallResponse.Builder().build());
-            } catch (Exception ignored) {}
+                new DatabaseHelper(getApplicationContext()).logBlocked(NumberUtils.normalize(number), decision.reason);
+            } catch (Throwable ignored) {}
         }
     }
 }
