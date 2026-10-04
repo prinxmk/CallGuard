@@ -25,3 +25,9 @@ Android 9+ call screening application.
 5. Confirm the phone no longer crashes/stops.
 6. Open Browse Blacklist and confirm the prefix is visible with Delete.
 7. Add the exact test number to Whitelist and confirm it overrides the blacklist prefix.
+
+
+## v1.2.6 Android 9 crash fix
+- Removed unconditional `Call.Details.getCallDirection()` from `CallScreeningServiceImpl`.
+- That method is API 29+, while Android 9 is API 28 and would crash the screening service when a call arrived.
+- The service now remains compatible with Android 9 and newer devices.
