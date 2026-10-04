@@ -4,275 +4,69 @@ import android.app.*;
 import android.app.role.RoleManager;
 import android.content.*;
 import android.content.pm.PackageManager;
-import android.net.Uri;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.os.*;
 import android.provider.Settings;
 import android.telecom.TelecomManager;
 import android.view.*;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
+import android.text.*;
 import java.io.*;
 import java.text.*;
 import java.util.*;
 
 public class MainActivity extends Activity {
     private DatabaseHelper db;
-    private TextView status, counts;
-    private Switch unknown;
+    private TextView status, counts, smsStatus;
+    private Switch unknown, smsSwitch;
+    private LinearLayout root;
+    private int blue=Color.rgb(21,101,192), navy=Color.rgb(10,35,70), surface=Color.rgb(247,249,252), green=Color.rgb(46,125,50), red=Color.rgb(198,40,40), dark=Color.rgb(35,48,64);
 
-    @Override protected void onCreate(Bundle b) {
-        super.onCreate(b);
-        setContentView(R.layout.activity_main);
-        db=new DatabaseHelper(this);
-        status=findViewById(R.id.tvStatus);
-        counts=findViewById(R.id.tvCounts);
-        unknown=findViewById(R.id.switchUnknown);
-
-        unknown.setChecked(com.callguard.app.Settings.blockUnknown(this));
-        unknown.setOnCheckedChangeListener((button, checked)->{
-            if (checked && Build.VERSION.SDK_INT >= 23 &&
-                    checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{android.Manifest.permission.READ_CONTACTS}, 501);
-            }
-            com.callguard.app.Settings.setBlockUnknown(this,checked);
-        });
-
-        findViewById(R.id.btnEnable).setOnClickListener(v->requestScreeningAccess());
-        findViewById(R.id.btnAddBlacklist).setOnClickListener(v->showAddDialog("BLACKLIST"));
-        findViewById(R.id.btnBlacklist).setOnClickListener(v->showRules("BLACKLIST"));
-        findViewById(R.id.btnWhitelist).setOnClickListener(v->showRules("WHITELIST"));
-        findViewById(R.id.btnHistory).setOnClickListener(v->showHistory());
-        findViewById(R.id.btnTest).setOnClickListener(v->showTestDialog());
-        findViewById(R.id.btnExport).setOnClickListener(v->exportRules());
-        findViewById(R.id.btnImport).setOnClickListener(v->importRules());
-        refresh();
-    }
-
+    @Override protected void onCreate(Bundle b){super.onCreate(b); db=new DatabaseHelper(this); NotificationHelper.ensureChannel(this); buildUi(); requestRuntimePermissions(); refresh();}
     @Override protected void onResume(){super.onResume(); if(db!=null) refresh();}
 
-    private boolean isCallGuardActive(){
-        TelecomManager tm=(TelecomManager)getSystemService(TELECOM_SERVICE);
-        if(Build.VERSION.SDK_INT>=29){
-            RoleManager rm=getSystemService(RoleManager.class);
-            return rm!=null && rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING);
-        }
-        return tm!=null && getPackageName().equals(tm.getDefaultDialerPackage());
+    private TextView tv(String text,float size,int color,boolean bold){TextView t=new TextView(this);t.setText(text);t.setTextSize(size);t.setTextColor(color);t.setTypeface(Typeface.DEFAULT,bold?Typeface.BOLD:Typeface.NORMAL);return t;}
+    private GradientDrawable bg(int color,float radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(radius);return g;}
+    private LinearLayout card(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(18,16,18,16);c.setBackground(bg(Color.WHITE,22));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,8,0,8);c.setLayoutParams(p);return c;}
+    private Button action(String text){Button b=new Button(this);b.setText(text);b.setAllCaps(false);b.setTextSize(14);b.setTextColor(dark);return b;}
+
+    private void buildUi(){
+        ScrollView scroll=new ScrollView(this); root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(18,12,18,24);root.setBackgroundColor(surface);scroll.addView(root);setContentView(scroll);
+        LinearLayout head=new LinearLayout(this);head.setOrientation(LinearLayout.HORIZONTAL);head.setGravity(Gravity.CENTER_VERTICAL);ImageView icon=new ImageView(this);icon.setImageResource(R.drawable.ic_launcher);head.addView(icon,new LinearLayout.LayoutParams(58,58));LinearLayout ht=new LinearLayout(this);ht.setOrientation(LinearLayout.VERTICAL);ht.setPadding(14,0,0,0);ht.addView(tv("CallGuard",29,navy,true));ht.addView(tv("Smart call & message protection",14,Color.GRAY,false));head.addView(ht,new LinearLayout.LayoutParams(0,-2,1));root.addView(head);
+        LinearLayout sc=card(); status=tv("Protection status",16,dark,true);sc.addView(status);counts=tv("",14,Color.GRAY,false);counts.setPadding(0,6,0,8);sc.addView(counts);Button enable=action("Enable / manage call screening");enable.setOnClickListener(v->requestScreeningAccess());sc.addView(enable);root.addView(sc);
+        LinearLayout rules=card();rules.addView(tv("Protection rules",19,navy,true));rules.addView(tv("Control exact numbers and prefixes. Whitelist rules override blacklist rules.",13,Color.GRAY,false));
+        Button add=action("＋  Add blacklist rule");add.setOnClickListener(v->showAddDialog("BLACKLIST"));rules.addView(add);Button bl=action("Browse blacklist");bl.setOnClickListener(v->showRules("BLACKLIST"));rules.addView(bl);Button wl=action("Browse whitelist");wl.setOnClickListener(v->showRules("WHITELIST"));rules.addView(wl);root.addView(rules);
+        LinearLayout history=card();history.addView(tv("Call history",19,navy,true));history.addView(tv("See the phone's system call log and add callers directly to either list.",13,Color.GRAY,false));Button system=action("View Phone (System) call history");system.setOnClickListener(v->showSystemCallHistory());history.addView(system);Button blocked=action("View blocked-call history");blocked.setOnClickListener(v->showBlockedHistory());history.addView(blocked);root.addView(history);
+        LinearLayout msg=card();msg.addView(tv("Message protection",19,navy,true));smsStatus=tv("",14,Color.GRAY,false);smsStatus.setPadding(0,6,0,8);msg.addView(smsStatus);smsSwitch=new Switch(this);smsSwitch.setText("Block SMS from blacklisted numbers/prefixes");smsSwitch.setTextSize(14);smsSwitch.setChecked(Settings.blockMessages(this));smsSwitch.setOnCheckedChangeListener((v,c)->{if(c&&!SmsRoleHelper.isDefault(this)){toast("Message blocking requires CallGuard to be the default SMS app.");smsSwitch.setChecked(false);requestSmsRole();return;}Settings.setBlockMessages(this,c);});msg.addView(smsSwitch);Button sms=action("Make CallGuard the default SMS app");sms.setOnClickListener(v->requestSmsRole());msg.addView(sms);root.addView(msg);
+        LinearLayout opt=card();opt.addView(tv("Other controls",19,navy,true));unknown=new Switch(this);unknown.setText("Block calls from numbers not saved in Contacts");unknown.setTextSize(14);unknown.setChecked(Settings.blockUnknown(this));unknown.setOnCheckedChangeListener((v,c)->{if(c&&checkSelfPermission("android.permission.READ_CONTACTS")!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{"android.permission.READ_CONTACTS"},501);Settings.setBlockUnknown(this,c);});opt.addView(unknown);Button test=action("Test a number");test.setOnClickListener(v->showTestDialog());opt.addView(test);Button export=action("Export rules");export.setOnClickListener(v->exportRules());opt.addView(export);Button imp=action("Import rules");imp.setOnClickListener(v->importRules());opt.addView(imp);root.addView(opt);
+        TextView foot=tv("CallGuard 1.3.0  •  By Prince Michael Adejoh",12,Color.GRAY,false);foot.setGravity(Gravity.CENTER);foot.setPadding(0,18,0,0);root.addView(foot);
     }
 
-    private void refresh(){
-        boolean active=isCallGuardActive();
-        String message;
-        if(Build.VERSION.SDK_INT>=29)
-            message=active ? "● Protection is ON" : "● Protection is OFF — enable CallGuard screening";
-        else
-            message=active ? "● Protection is ON — Android 9 mode" : "● Protection is OFF — make CallGuard the default Phone app";
-        status.setText(message);
-        status.setTextColor(getResources().getColor(active?R.color.green:R.color.red));
-        counts.setText("Blacklist: "+db.countRules("BLACKLIST")+
-                "    Whitelist: "+db.countRules("WHITELIST")+
-                "    Blocked: "+db.countBlocked());
+    private void requestRuntimePermissions(){
+        ArrayList<String> p=new ArrayList<>(); if(Build.VERSION.SDK_INT>=23){if(checkSelfPermission("android.permission.READ_CALL_LOG")!=PackageManager.PERMISSION_GRANTED)p.add("android.permission.READ_CALL_LOG");if(checkSelfPermission("android.permission.READ_CONTACTS")!=PackageManager.PERMISSION_GRANTED)p.add("android.permission.READ_CONTACTS");if(checkSelfPermission("android.permission.READ_SMS")!=PackageManager.PERMISSION_GRANTED)p.add("android.permission.READ_SMS");if(checkSelfPermission("android.permission.RECEIVE_SMS")!=PackageManager.PERMISSION_GRANTED)p.add("android.permission.RECEIVE_SMS");if(Build.VERSION.SDK_INT>=33&&checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=PackageManager.PERMISSION_GRANTED)p.add("android.permission.POST_NOTIFICATIONS");} if(!p.isEmpty())requestPermissions(p.toArray(new String[0]),900);
     }
 
-    private void requestScreeningAccess(){
-        if(Build.VERSION.SDK_INT>=29){
-            RoleManager rm=getSystemService(RoleManager.class);
-            if(rm!=null && rm.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING)){
-                startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING),100);
-                return;
-            }
-            showDiagnostics();
-            return;
-        }
+    private boolean isCallGuardActive(){TelecomManager tm=(TelecomManager)getSystemService(TELECOM_SERVICE);if(Build.VERSION.SDK_INT>=29){RoleManager rm=getSystemService(RoleManager.class);return rm!=null&&rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING);}return tm!=null&&getPackageName().equals(tm.getDefaultDialerPackage());}
+    private void refresh(){boolean active=isCallGuardActive();status.setText(active?"●  Protection is ON":"●  Protection is OFF — tap Enable / manage call screening");status.setTextColor(active?green:red);counts.setText("Blacklist  "+db.countRules("BLACKLIST")+"   •   Whitelist  "+db.countRules("WHITELIST")+"   •   Blocked calls  "+db.countBlocked());if(smsStatus!=null){boolean def=SmsRoleHelper.isDefault(this);smsStatus.setText(def?(Settings.blockMessages(this)?"Message blocking is ON":"CallGuard is the default SMS app — blocking is OFF"):"Default SMS app: another messaging app");smsStatus.setTextColor(def&&Settings.blockMessages(this)?green:Color.GRAY);}}
+    private void requestScreeningAccess(){if(Build.VERSION.SDK_INT>=29){RoleManager rm=getSystemService(RoleManager.class);if(rm!=null&&rm.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING)){startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING),100);return;}}showDiagnostics();}
+    private void openPhoneSettings(){try{startActivity(new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));}catch(Exception e){startActivity(new Intent(Settings.ACTION_SETTINGS));}}
+    private void showDiagnostics(){TelecomManager tm=(TelecomManager)getSystemService(TELECOM_SERVICE);String d=tm==null?null:tm.getDefaultDialerPackage();StringBuilder b=new StringBuilder();b.append("Android ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n\n");b.append("Default Phone: ").append(d==null?"Unknown":d).append("\n\n");if(Build.VERSION.SDK_INT<29)b.append("Android 9 uses the installed CallScreeningService path supported by your device. CallGuard will not replace your Phone app automatically.");else b.append(isCallGuardActive()?"CallGuard holds the call-screening role.":"CallGuard does not currently hold the call-screening role.");new AlertDialog.Builder(this).setTitle("CallGuard diagnostics").setMessage(b).setPositiveButton("OK",null).setNeutralButton("Default Phone settings",(x,w)->openPhoneSettings()).show();}
 
-        // Android 9 has CallScreeningService (API 24+) but does not expose
-        // RoleManager/ROLE_CALL_SCREENING (introduced in API 29). Do not
-        // silently replace the user's Phone app. Show the exact diagnostic
-        // state and available legacy path instead.
-        showDiagnostics();
-    }
+    private void showAddDialog(String type){LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(28,8,28,4);Spinner kind=new Spinner(this);kind.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"PREFIX","EXACT"}));EditText input=new EditText(this);input.setHint("e.g. 0803 or 08031234567");input.setSingleLine(true);input.setInputType(2);box.addView(kind);box.addView(input);new AlertDialog.Builder(this).setTitle(type.equals("WHITELIST")?"Add whitelist rule":"Add blacklist rule").setView(box).setPositiveButton("Save",(d,w)->{String v=NumberUtils.normalize(input.getText().toString());if(v.isEmpty()){toast("Enter a number or prefix");return;}String k=(String)kind.getSelectedItem();String t=type.equals("WHITELIST")?("PREFIX".equals(k)?"WHITELIST_PREFIX":"WHITELIST"):("PREFIX".equals(k)?"PREFIX":"EXACT");toast(db.addRule(v,t)?"Rule saved":"Rule already exists");refresh();}).setNegativeButton("Cancel",null).show();}
 
-    private void openPhoneSettings(){
-        try{ startActivity(new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)); }
-        catch(Exception e){ startActivity(new Intent(Settings.ACTION_SETTINGS)); }
-    }
+    private void showRules(String type){LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(14,8,14,4);LinearLayout bar=new LinearLayout(this);EditText search=new EditText(this);search.setHint("Search number, prefix or part of it");search.setSingleLine(true);bar.addView(search,new LinearLayout.LayoutParams(0,-2,1));Button add=action("Add");bar.addView(add);box.addView(bar);TextView empty=tv("No matching entries.",14,Color.GRAY,false);empty.setGravity(Gravity.CENTER);empty.setPadding(0,24,0,24);box.addView(empty);ListView list=new ListView(this);box.addView(list,new LinearLayout.LayoutParams(-1,(int)(getResources().getDisplayMetrics().density*440)));AlertDialog dialog=new AlertDialog.Builder(this).setTitle(type.equals("BLACKLIST")?"Blacklist":"Whitelist").setView(box).setNegativeButton("Close",null).create();add.setOnClickListener(v->showAddDialog(type));final Runnable[] reload=new Runnable[1];reload[0]=()->{ArrayList<DatabaseHelper.Rule> data=db.getRules(type,search.getText().toString().trim());empty.setVisibility(data.isEmpty()?View.VISIBLE:View.GONE);list.setVisibility(data.isEmpty()?View.GONE:View.VISIBLE);list.setAdapter(new BaseAdapter(){public int getCount(){return data.size();}public Object getItem(int p){return data.get(p);}public long getItemId(int p){return data.get(p).id;}public View getView(int p,View cv,ViewGroup parent){DatabaseHelper.Rule r=data.get(p);LinearLayout row=new LinearLayout(MainActivity.this);row.setOrientation(LinearLayout.VERTICAL);row.setPadding(10,12,10,12);row.setBackground(bg(p%2==0?Color.WHITE:surface,12));TextView v=tv(r.value,18,blue,true);row.addView(v);row.addView(tv(ruleLabel(r)+"  •  "+(r.enabled?"Enabled":"Disabled"),13,Color.GRAY,false));LinearLayout actions=new LinearLayout(MainActivity.this);Button en=action(r.enabled?"Disable":"Enable");en.setOnClickListener(x->{db.setRuleEnabled(r.id,!r.enabled);reload[0].run();refresh();});Button del=action("Delete");del.setTextColor(red);del.setOnClickListener(x->new AlertDialog.Builder(MainActivity.this).setTitle("Remove rule?").setMessage(r.value).setNegativeButton("Cancel",null).setPositiveButton("Delete",(a,z)->{db.deleteRule(r.id);reload[0].run();refresh();}).show());actions.addView(en,new LinearLayout.LayoutParams(0,-2,1));actions.addView(del,new LinearLayout.LayoutParams(0,-2,1));row.addView(actions);return row;}});};search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int d){}public void onTextChanged(CharSequence s,int a,int b,int c){reload[0].run();}public void afterTextChanged(Editable e){}});dialog.setOnShowListener(x->reload[0].run());dialog.show();}
+    private String ruleLabel(DatabaseHelper.Rule r){return ("PREFIX".equals(r.type)||"WHITELIST_PREFIX".equals(r.type))?"Prefix rule":"Exact number";}
 
-    private void showDiagnostics(){
-        TelecomManager tm=(TelecomManager)getSystemService(TELECOM_SERVICE);
-        String defaultDialer=tm!=null ? tm.getDefaultDialerPackage() : null;
-        boolean isDefaultDialer=getPackageName().equals(defaultDialer);
-        boolean screeningServiceDeclared=false;
-        try{
-            android.content.Intent probe=new android.content.Intent("android.telecom.CallScreeningService");
-            probe.setPackage(getPackageName());
-            screeningServiceDeclared=getPackageManager().queryIntentServices(probe,0).size()>0;
-        }catch(Exception ignored){}
+    private void showBlockedHistory(){ArrayList<DatabaseHelper.BlockedCall> data=db.getBlockedCalls("");String[] rows=new String[data.size()];for(int i=0;i<data.size();i++){DatabaseHelper.BlockedCall x=data.get(i);rows[i]=x.number+"\n"+x.reason+"\n"+new SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.getDefault()).format(new Date(x.timestamp));}AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Blocked calls ("+data.size()+")").setItems(rows,null).setNegativeButton("Close",null).setNeutralButton("Clear history",null).create();dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Clear blocked history?").setMessage("All locally stored blocked-call records will be removed.").setNegativeButton("Cancel",null).setPositiveButton("Clear",(a,w)->{db.clearBlockedCalls();dialog.dismiss();refresh();toast("Blocked-call history cleared");}).show()));dialog.show();}
 
-        StringBuilder b=new StringBuilder();
-        b.append("Android version: ").append(Build.VERSION.RELEASE).append("\n");
-        b.append("API level: ").append(Build.VERSION.SDK_INT).append("\n\n");
-        b.append("CallScreeningService declared: ").append(screeningServiceDeclared?"YES":"NO").append("\n");
-        b.append("Call screening role API: ").append(Build.VERSION.SDK_INT>=29?"AVAILABLE":"NOT AVAILABLE on Android 9").append("\n");
-        b.append("Default Phone package: ").append(defaultDialer==null?"Unknown":defaultDialer).append("\n");
-        b.append("CallGuard is default Phone: ").append(isDefaultDialer?"YES":"NO").append("\n\n");
+    private void showSystemCallHistory(){if(checkSelfPermission("android.permission.READ_CALL_LOG")!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{"android.permission.READ_CALL_LOG"},902);return;}LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(12,8,12,4);EditText search=new EditText(this);search.setHint("Search caller number");search.setSingleLine(true);box.addView(search);ListView list=new ListView(this);box.addView(list,new LinearLayout.LayoutParams(-1,(int)(getResources().getDisplayMetrics().density*500)));AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Phone call history").setView(box).setNegativeButton("Close",null).create();final Runnable[] reload=new Runnable[1];reload[0]=()->{ArrayList<CallLogHelper.Entry> data=CallLogHelper.getRecent(this,search.getText().toString());list.setAdapter(new BaseAdapter(){public int getCount(){return data.size();}public Object getItem(int p){return data.get(p);}public long getItemId(int p){return p;}public View getView(int p,View cv,ViewGroup par){CallLogHelper.Entry e=data.get(p);LinearLayout row=new LinearLayout(MainActivity.this);row.setOrientation(LinearLayout.VERTICAL);row.setPadding(10,12,10,12);String title=(e.name==null||e.name.isEmpty())?e.number:e.name+"\n"+e.number;row.addView(tv(title,17,dark,true));String typ=e.type==2?"Outgoing":e.type==3?"Missed":e.type==4?"Voicemail":"Incoming";row.addView(tv(typ+"  •  "+new SimpleDateFormat("dd MMM yyyy, HH:mm",Locale.getDefault()).format(new Date(e.date)),13,Color.GRAY,false));LinearLayout acts=new LinearLayout(MainActivity.this);Button bl=action("Blacklist");Button wl=action("Whitelist");bl.setOnClickListener(v->quickAddFromHistory(e.number,"BLACKLIST"));wl.setOnClickListener(v->quickAddFromHistory(e.number,"WHITELIST"));acts.addView(bl,new LinearLayout.LayoutParams(0,-2,1));acts.addView(wl,new LinearLayout.LayoutParams(0,-2,1));row.addView(acts);return row;}});};search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){reload[0].run();}public void afterTextChanged(Editable e){}});dialog.setOnShowListener(x->reload[0].run());dialog.show();}
+    private void quickAddFromHistory(String number,String type){String n=NumberUtils.normalize(number);if(n.isEmpty()){toast("No valid number");return;}new AlertDialog.Builder(this).setTitle(type.equals("BLACKLIST")?"Add to blacklist":"Add to whitelist").setMessage(n).setPositiveButton("Exact number",(d,w)->{String t=type.equals("BLACKLIST")?"EXACT":"WHITELIST";toast(db.addRule(n,t)?"Added":"Already exists");refresh();}).setNeutralButton("Prefix",(d,w)->{String t=type.equals("BLACKLIST")?"PREFIX":"WHITELIST_PREFIX";toast(db.addRule(n,t)?"Added":"Already exists");refresh();}).setNegativeButton("Cancel",null).show();}
 
-        if(Build.VERSION.SDK_INT<29){
-            b.append("Android 9 does not expose the public RoleManager call-screening selection API.\n\n");
-            b.append("CallGuard's screening service is installed, but this diagnostic cannot claim that XOS has selected it as the active third-party screening provider.\n\n");
-            b.append("Your phone currently uses the system Phone app. We will not replace it automatically.\n\n");
-            b.append("Next test: place an incoming call after adding a test prefix. If this diagnostic records a screening callback, we can confirm the service is active on this XOS build.");
-        }else{
-            b.append(isCallGuardActive()?"CallGuard currently holds the screening role.":"CallGuard does not currently hold the screening role.");
-        }
-
-        new AlertDialog.Builder(this).setTitle("CallGuard Diagnostics")
-            .setMessage(b.toString())
-            .setPositiveButton("OK",null)
-            .setNeutralButton("Default Phone Settings",(d,w)->openPhoneSettings())
-            .show();
-    }
-
-    private void showAddDialog(String type){
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(30,10,30,10);
-        Spinner kind=new Spinner(this);
-        String[] kinds=type.equals("WHITELIST")?new String[]{"PREFIX","EXACT"}:new String[]{"PREFIX","EXACT"};
-        kind.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,kinds));
-        EditText input=new EditText(this); input.setHint("e.g. 0803 or 08031234567"); input.setInputType(2);
-        box.addView(kind); box.addView(input);
-        String title=type.equals("WHITELIST")?"Add Whitelist Rule":"Add Blacklist Rule";
-        new AlertDialog.Builder(this).setTitle(title).setView(box)
-            .setPositiveButton("Save",(d,w)->{
-                String value=NumberUtils.normalize(input.getText().toString());
-                String k=(String)kind.getSelectedItem();
-                if(value.length()==0){toast("Enter a number or prefix");return;}
-                String dbType=type.equals("WHITELIST")?("PREFIX".equals(k)?"WHITELIST_PREFIX":"WHITELIST"):("PREFIX".equals(k)?"PREFIX":"EXACT");
-                if(db.addRule(value,dbType)) toast("Rule saved"); else toast("Rule already exists");
-                refresh();
-            }).setNegativeButton("Cancel",null).show();
-    }
-
-    private void showRules(String type){
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(20,10,20,10);
-        LinearLayout actions=new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
-        EditText search=new EditText(this); search.setHint("Search number or prefix"); search.setSingleLine(true); search.setInputType(android.text.InputType.TYPE_CLASS_PHONE);
-        actions.addView(search,new LinearLayout.LayoutParams(0,-2,1));
-        Button add=new Button(this); add.setText("Add"); actions.addView(add,new LinearLayout.LayoutParams(-2,-2));
-        box.addView(actions);
-        TextView empty=new TextView(this); empty.setText("No entries found."); empty.setGravity(Gravity.CENTER); empty.setPadding(10,30,10,30); empty.setVisibility(View.GONE); box.addView(empty);
-        ListView list=new ListView(this);
-        int listHeight=(int)(getResources().getDisplayMetrics().density*390);
-        box.addView(list,new LinearLayout.LayoutParams(-1,listHeight));
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle(type.equals("BLACKLIST")?"Blacklist":"Whitelist").setView(box).setNegativeButton("Close",null).create();
-        add.setOnClickListener(v->showAddDialog(type));
-
-        final Runnable[] reload=new Runnable[1];
-        reload[0]=()->{
-            ArrayList<DatabaseHelper.Rule> data=db.getRules(type,search.getText().toString().trim());
-            empty.setVisibility(data.isEmpty()?View.VISIBLE:View.GONE);
-            list.setVisibility(data.isEmpty()?View.GONE:View.VISIBLE);
-            BaseAdapter adapter=new BaseAdapter(){
-                @Override public int getCount(){return data.size();}
-                @Override public Object getItem(int position){return data.get(position);}
-                @Override public long getItemId(int position){return data.get(position).id;}
-                @Override public View getView(int position,View convertView,android.view.ViewGroup parent){
-                    DatabaseHelper.Rule r=data.get(position);
-                    LinearLayout row=new LinearLayout(MainActivity.this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(10,12,4,12);
-                    LinearLayout info=new LinearLayout(MainActivity.this); info.setOrientation(LinearLayout.VERTICAL);
-                    TextView value=new TextView(MainActivity.this); value.setText(r.value); value.setTextSize(17); value.setTextColor(getResources().getColor(R.color.primary)); value.setTypeface(null,android.graphics.Typeface.BOLD);
-                    TextView meta=new TextView(MainActivity.this); meta.setText(ruleLabel(r)+" • "+(r.enabled?"Enabled":"Disabled"));
-                    info.addView(value); info.addView(meta); row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
-                    Button toggle=new Button(MainActivity.this); toggle.setText(r.enabled?"Disable":"Enable");
-                    toggle.setOnClickListener(v->{db.setRuleEnabled(r.id,!r.enabled); reload[0].run(); refresh();});
-                    row.addView(toggle,new LinearLayout.LayoutParams(-2,-2));
-                    Button del=new Button(MainActivity.this); del.setText("Delete");
-                    del.setOnClickListener(v->new AlertDialog.Builder(MainActivity.this).setTitle("Delete rule?").setMessage(r.value+"\n\nThis cannot be undone.").setNegativeButton("Cancel",null).setPositiveButton("Delete",(d,w)->{db.deleteRule(r.id); reload[0].run(); refresh();}).show());
-                    row.addView(del,new LinearLayout.LayoutParams(-2,-2));
-                    row.setOnClickListener(v->showRuleActions(r,type,reload[0]));
-                    return row;
-                }
-            };
-            list.setAdapter(adapter);
-        };
-        search.addTextChangedListener(new android.text.TextWatcher(){
-            public void beforeTextChanged(CharSequence s,int st,int c,int a){}
-            public void onTextChanged(CharSequence s,int st,int before,int count){reload[0].run();}
-            public void afterTextChanged(android.text.Editable e){}
-        });
-        dialog.setOnShowListener(d->reload[0].run());
-        dialog.show();
-    }
-
-    private void showRuleActions(DatabaseHelper.Rule r,String listType,Runnable reload){
-        ArrayList<String> options=new ArrayList<>();
-        options.add(r.enabled?"Disable":"Enable");
-        options.add("Delete");
-        if(!r.type.startsWith("WHITELIST")) options.add("Add to Whitelist");
-        new AlertDialog.Builder(this).setTitle(r.value).setMessage(ruleLabel(r)).setItems(options.toArray(new String[0]),(di,which)->{
-            if(which==0) db.setRuleEnabled(r.id,!r.enabled);
-            else if(which==1) db.deleteRule(r.id);
-            else db.addRule(r.value, "PREFIX".equals(r.type)?"WHITELIST_PREFIX":"WHITELIST");
-            reload.run(); refresh();
-        }).show();
-    }
-
-    private String ruleLabel(DatabaseHelper.Rule r){
-        if("PREFIX".equals(r.type)||"WHITELIST_PREFIX".equals(r.type)) return "Prefix rule";
-        return "Exact number";
-    }
-
-    private void showHistory(){
-        ArrayList<DatabaseHelper.BlockedCall> data=db.getBlockedCalls("");
-        String[] rows=new String[data.size()];
-        for(int i=0;i<data.size();i++){
-            DatabaseHelper.BlockedCall x=data.get(i);
-            rows[i]=x.number+"\n"+x.reason+"\n"+new SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.getDefault()).format(new Date(x.timestamp));
-        }
-        new AlertDialog.Builder(this).setTitle("Blocked Calls ("+data.size()+")")
-            .setItems(rows,null).setPositiveButton("Close",null).show();
-    }
-
-    private void showTestDialog(){
-        EditText input=new EditText(this); input.setHint("Enter number to test"); input.setInputType(2);
-        new AlertDialog.Builder(this).setTitle("Test a Number").setView(input)
-            .setPositiveButton("Test",(d,w)->{
-                String n=NumberUtils.normalize(input.getText().toString());
-                CallDecision x=RuleEngine.decide(this,n);
-                new AlertDialog.Builder(this).setTitle(x.block?"BLOCKED":"ALLOWED")
-                    .setMessage("Number: "+n+"\n\nReason: "+x.reason)
-                    .setPositiveButton("OK",null).show();
-            }).setNegativeButton("Cancel",null).show();
-    }
-
-    private void exportRules(){
-        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT); i.setType("text/csv"); i.putExtra(Intent.EXTRA_TITLE,"callguard_rules.csv"); startActivityForResult(i,701);
-    }
-    private void importRules(){
-        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("text/*"); i.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(i,702);
-    }
-
-    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
-        super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode==100 || requestCode==110){refresh(); return;}
-        if(resultCode!=RESULT_OK || data==null) return;
-        if(requestCode==701){
-            try(OutputStream out=getContentResolver().openOutputStream(data.getData()); PrintWriter pw=new PrintWriter(out)){
-                pw.println("type,value,enabled");
-                for(DatabaseHelper.Rule r:db.getAllRules()) pw.println(r.type+","+r.value+","+(r.enabled?1:0));
-                toast("Rules exported");
-            }catch(Exception e){toast("Export failed: "+e.getMessage());}
-        }else if(requestCode==702){
-            int added=0;
-            try(BufferedReader br=new BufferedReader(new InputStreamReader(getContentResolver().openInputStream(data.getData())))){
-                String line; boolean first=true;
-                while((line=br.readLine())!=null){
-                    if(first){first=false;continue;}
-                    String[] a=line.split(",");
-                    if(a.length>=2){
-                        String t=a[0].trim(), value=NumberUtils.normalize(a[1]);
-                        if((t.equals("PREFIX")||t.equals("EXACT")||t.equals("WHITELIST")||t.equals("WHITELIST_PREFIX"))&&!value.isEmpty()&&db.addRule(value,t)) added++;
-                    }
-                }
-                toast("Imported "+added+" new rules"); refresh();
-            }catch(Exception e){toast("Import failed: "+e.getMessage());}
-        }
-    }
+    private void requestSmsRole(){SmsRoleHelper.request(this,110,this);}
+    private void showTestDialog(){EditText input=new EditText(this);input.setHint("Enter number to test");input.setInputType(2);new AlertDialog.Builder(this).setTitle("Test a number").setView(input).setPositiveButton("Test",(d,w)->{String n=NumberUtils.normalize(input.getText().toString());CallDecision x=RuleEngine.decide(this,n);new AlertDialog.Builder(this).setTitle(x.block?"BLOCKED":"ALLOWED").setMessage("Number: "+n+"\n\nReason: "+x.reason).setPositiveButton("OK",null).show();}).setNegativeButton("Cancel",null).show();}
+    private void exportRules(){Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("text/csv");i.putExtra(Intent.EXTRA_TITLE,"callguard_rules.csv");startActivityForResult(i,701);}private void importRules(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("text/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,702);}
+    @Override protected void onActivityResult(int r,int result,Intent data){super.onActivityResult(r,result,data);if(r==100||r==110){refresh();return;}if(result!=RESULT_OK||data==null)return;if(r==701){try(OutputStream out=getContentResolver().openOutputStream(data.getData());PrintWriter pw=new PrintWriter(out)){pw.println("type,value,enabled");for(DatabaseHelper.Rule x:db.getAllRules())pw.println(x.type+","+x.value+","+(x.enabled?1:0));toast("Rules exported");}catch(Exception e){toast("Export failed");}}else if(r==702){int added=0;try(BufferedReader br=new BufferedReader(new InputStreamReader(getContentResolver().openInputStream(data.getData())))){String line;boolean first=true;while((line=br.readLine())!=null){if(first){first=false;continue;}String[] a=line.split(",");if(a.length>=2){String t=a[0].trim(),v=NumberUtils.normalize(a[1]);if((t.equals("PREFIX")||t.equals("EXACT")||t.equals("WHITELIST")||t.equals("WHITELIST_PREFIX"))&&!v.isEmpty()&&db.addRule(v,t))added++;}}toast("Imported "+added+" new rules");refresh();}catch(Exception e){toast("Import failed");}}}
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
 }

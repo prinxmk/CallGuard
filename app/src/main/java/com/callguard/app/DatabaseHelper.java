@@ -7,13 +7,14 @@ import java.util.*;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "callguard.db";
-    private static final int DB_VERSION = 3;
+    private static final int DB_VERSION = 4;
 
     public DatabaseHelper(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE rules (id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL, type TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL)");
         db.execSQL("CREATE TABLE blocked_calls (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, reason TEXT, timestamp INTEGER NOT NULL)");
+        db.execSQL("CREATE TABLE blocked_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, body TEXT, reason TEXT, timestamp INTEGER NOT NULL)");
         db.execSQL("CREATE INDEX idx_rules_value ON rules(value)");
         db.execSQL("CREATE INDEX idx_rules_type ON rules(type)");
         db.execSQL("CREATE UNIQUE INDEX idx_rules_value_type ON rules(value,type)");
@@ -34,6 +35,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } finally { db.endTransaction(); }
         }
         if (oldVersion < 3) migrateLegacyRuleTypes(db);
+        if (oldVersion < 4) { db.execSQL("CREATE TABLE IF NOT EXISTS blocked_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, body TEXT, reason TEXT, timestamp INTEGER NOT NULL)"); }
     }
 
     private void migrateLegacyRuleTypes(SQLiteDatabase db) {
@@ -118,6 +120,18 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         Cursor c=getReadableDatabase().query("blocked_calls",null,"number LIKE ? OR reason LIKE ?",new String[]{"%"+search+"%","%"+search+"%"},null,null,"timestamp DESC");
         while(c.moveToNext()) out.add(new BlockedCall(c.getLong(0),c.getString(1),c.getString(2),c.getLong(3)));
         c.close(); return out;
+    }
+
+
+    public void clearBlockedCalls() { getWritableDatabase().delete("blocked_calls", null, null); }
+
+    public void logBlockedMessage(String number, String body, String reason) {
+        ContentValues v=new ContentValues(); v.put("number",number); v.put("body",body); v.put("reason",reason); v.put("timestamp",System.currentTimeMillis());
+        getWritableDatabase().insert("blocked_messages",null,v);
+    }
+
+    public int countBlockedMessages() {
+        Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM blocked_messages",null); c.moveToFirst(); int n=c.getInt(0); c.close(); return n;
     }
 
     public int countRules(String type) {

@@ -40,6 +40,9 @@ public class CallScreeningServiceImpl extends CallScreeningService {
         if (block) {
             try {
                 new DatabaseHelper(getApplicationContext()).logBlocked(NumberUtils.normalize(number), decision.reason);
+                NotificationHelper.showBlocked(getApplicationContext(), "Call blocked",
+                        "Blocked call from " + (number.isEmpty()?"Unknown number":number) + " • " + decision.reason,
+                        1000 + (int)(System.currentTimeMillis() % 1000));
             } catch (Throwable ignored) {}
         }
     }

@@ -1,33 +1,19 @@
-# CallGuard v1.2.5
+# CallGuard 1.3.0
 
-Android 9+ call screening application.
+Android 9+ call and message protection build.
 
-## v1.2.5 stability changes
-- Removed the custom `InCallService` from the application manifest. CallGuard now relies on Android's normal incoming-call UI and only performs call screening.
-- Hardened `CallScreeningService` so exceptions cannot escape the telecom callback.
-- The screening response is sent before blocked-call history is written.
-- Database/rule failures safely allow the call rather than crashing the telecom callback.
+## Highlights
+- Android 9-safe CallScreeningService; no API-29-only call-direction APIs in the telecom callback.
+- Animated splash screen with version and author credit.
+- Modern card-based main UI.
+- Browse/search/delete/enable blacklist and whitelist entries.
+- Clear blocked-call history.
+- Read the Phone (System) call log after permission and add callers directly to blacklist/whitelist.
+- High-priority heads-up notifications for blocked calls and blocked messages.
+- Optional SMS blocking for blacklisted numbers/prefixes.
 
-## Blacklist / whitelist changes
-- Browse screens now have a real visible list area.
-- Existing entries are shown even when the database contains legacy rule types.
-- Every row has visible **Enable/Disable** and **Delete** buttons.
-- Search supports partial numbers and prefixes and normalizes common Nigerian formats.
-- Database version 3 migrates legacy BLACKLIST/WHITELIST records.
-- The same value can exist as a blacklist and whitelist rule because uniqueness is value + rule type.
-- Whitelist rules are evaluated before blacklist rules.
+## SMS limitation
+Reliable SMS interception/removal requires CallGuard to be the device's default SMS application. The app therefore asks the user to explicitly grant the SMS role. When CallGuard is the default SMS app and Message Blocking is enabled, blacklisted messages are not inserted into the SMS inbox; allowed messages are stored in the inbox provider. If another SMS app remains the default, CallGuard does not claim to reliably block SMS.
 
-## Important Android 9 test
-1. Install the new APK over the previous installation.
-2. Keep CallGuard selected as the phone's screening/default provider according to the device's settings.
-3. Add a test blacklist prefix such as `0803`.
-4. Receive a call from a matching test number.
-5. Confirm the phone no longer crashes/stops.
-6. Open Browse Blacklist and confirm the prefix is visible with Delete.
-7. Add the exact test number to Whitelist and confirm it overrides the blacklist prefix.
-
-
-## v1.2.6 Android 9 crash fix
-- Removed unconditional `Call.Details.getCallDirection()` from `CallScreeningServiceImpl`.
-- That method is API 29+, while Android 9 is API 28 and would crash the screening service when a call arrived.
-- The service now remains compatible with Android 9 and newer devices.
+## Build
+Use the included GitHub Actions workflow or run `./gradlew assembleDebug` with Android Gradle Plugin 8.6.1 / compile SDK 35.
