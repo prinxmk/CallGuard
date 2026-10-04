@@ -26,7 +26,7 @@ public class SplashActivity extends Activity {
         int s=(int)(getResources().getDisplayMetrics().density*104); root.addView(icon,new LinearLayout.LayoutParams(s,s));
         TextView name=new TextView(this); name.setText("CallGuard"); name.setTextColor(Color.WHITE); name.setTextSize(34); name.setTypeface(Typeface.DEFAULT,Typeface.BOLD); name.setGravity(Gravity.CENTER); name.setPadding(0,18,0,4); root.addView(name);
         TextView ver=new TextView(this); ver.setText("Version 1.3.0"); ver.setTextColor(Color.rgb(190,215,245)); ver.setTextSize(16); ver.setGravity(Gravity.CENTER); root.addView(ver);
-        TextView by=new TextView(this); by.setText("By Prince Michael Adejoh"); by.setTextColor(Color.rgb(190,215,245)); by.setTextSize(15); by.setGravity(Gravity.CENTER); by.setPadding(0,12,0,0); root.addView(by);
+        TextView by=new TextView(this); by.setText("By Prince Gold Michael .A."); by.setTextColor(Color.rgb(190,215,245)); by.setTextSize(15); by.setGravity(Gravity.CENTER); by.setPadding(0,12,0,0); root.addView(by);
         TextView mycontact=new TextView(this); mycontact.setText("WhatsApp +234-803-766-3916"); mycontact.setTextColor(Color.rgb(190,215,245)); mycontact.setTextSize(15); mycontact.setGravity(Gravity.CENTER); mycontact.setPadding(0,12,0,0); root.addView(mycontact);
         setContentView(root);
         AnimationSet a=new AnimationSet(true); a.addAnimation(new AlphaAnimation(0f,1f)); a.addAnimation(new ScaleAnimation(.82f,1f,.82f,1f,1,0.5f,1,0.5f)); a.setDuration(800); icon.startAnimation(a); name.startAnimation(a);
