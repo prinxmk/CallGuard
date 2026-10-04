@@ -133,25 +133,32 @@ public class MainActivity extends Activity {
     private void showAddDialog(String type){
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(30,10,30,10);
         Spinner kind=new Spinner(this);
-        String[] kinds={"PREFIX","EXACT"};
+        String[] kinds=type.equals("WHITELIST")?new String[]{"PREFIX","EXACT"}:new String[]{"PREFIX","EXACT"};
         kind.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,kinds));
-        EditText input=new EditText(this); input.setHint("e.g. 0700 or 08012345678"); input.setInputType(2);
+        EditText input=new EditText(this); input.setHint("e.g. 0803 or 08031234567"); input.setInputType(2);
         box.addView(kind); box.addView(input);
-        new AlertDialog.Builder(this).setTitle("Add Blacklist Rule").setView(box)
+        String title=type.equals("WHITELIST")?"Add Whitelist Rule":"Add Blacklist Rule";
+        new AlertDialog.Builder(this).setTitle(title).setView(box)
             .setPositiveButton("Save",(d,w)->{
                 String value=NumberUtils.normalize(input.getText().toString());
                 String k=(String)kind.getSelectedItem();
                 if(value.length()==0){toast("Enter a number or prefix");return;}
-                if(db.addRule(value,"PREFIX".equals(k)?"PREFIX":"EXACT")) toast("Rule saved"); else toast("Rule already exists");
+                String dbType=type.equals("WHITELIST")?("PREFIX".equals(k)?"WHITELIST_PREFIX":"WHITELIST"):("PREFIX".equals(k)?"PREFIX":"EXACT");
+                if(db.addRule(value,dbType)) toast("Rule saved"); else toast("Rule already exists");
                 refresh();
             }).setNegativeButton("Cancel",null).show();
     }
 
     private void showRules(String type){
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(20,10,20,10);
-        EditText search=new EditText(this); search.setHint("Search"); box.addView(search);
+        LinearLayout actions=new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
+        EditText search=new EditText(this); search.setHint("Search number or prefix"); search.setSingleLine(true);
+        actions.addView(search,new LinearLayout.LayoutParams(0,-2,1));
+        Button add=new Button(this); add.setText("Add"); actions.addView(add,new LinearLayout.LayoutParams(-2,-2));
+        box.addView(actions);
         ListView list=new ListView(this); box.addView(list,new LinearLayout.LayoutParams(-1,0,1));
         Dialog dialog=new AlertDialog.Builder(this).setTitle(type.equals("BLACKLIST")?"Blacklist":"Whitelist").setView(box).create();
+        add.setOnClickListener(v->showAddDialog(type));
 
         final Runnable[] reload=new Runnable[1];
         reload[0]=()->{
@@ -159,24 +166,23 @@ public class MainActivity extends Activity {
             ArrayAdapter<String> a=new ArrayAdapter<String>(this,android.R.layout.simple_list_item_2,android.R.id.text1){
                 @Override public View getView(int p,View cv,android.view.ViewGroup parent){
                     View v=super.getView(p,cv,parent);
-                    TextView t=v.findViewById(android.R.id.text1);
-                    TextView s=v.findViewById(android.R.id.text2);
+                    TextView t=v.findViewById(android.R.id.text1); TextView s=v.findViewById(android.R.id.text2);
                     DatabaseHelper.Rule r=data.get(p);
-                    t.setText(r.value+"  ["+r.type+"]");
-                    s.setText(r.enabled?"Enabled":"Disabled");
-                    return v;
+                    t.setText(r.value+"  ["+r.type+"]"); s.setText(r.enabled?"Enabled":"Disabled"); return v;
                 }
             };
             list.setAdapter(a);
             list.setOnItemClickListener((p,v,pos,id)->{
                 DatabaseHelper.Rule r=data.get(pos);
-                new AlertDialog.Builder(this).setTitle(r.value)
-                    .setItems(new String[]{r.enabled?"Disable":"Enable","Delete","Add to Whitelist"},(di,which)->{
-                        if(which==0) db.setRuleEnabled(r.id,!r.enabled);
-                        else if(which==1) db.deleteRule(r.id);
-                        else db.addRule(r.value,"WHITELIST");
-                        reload[0].run(); refresh();
-                    }).show();
+                ArrayList<String> options=new ArrayList<>();
+                options.add(r.enabled?"Disable":"Enable"); options.add("Delete");
+                if(!r.type.startsWith("WHITELIST")) options.add("Add to Whitelist");
+                new AlertDialog.Builder(this).setTitle(r.value).setItems(options.toArray(new String[0]),(di,which)->{
+                    if(which==0) db.setRuleEnabled(r.id,!r.enabled);
+                    else if(which==1) db.deleteRule(r.id);
+                    else db.addRule(r.value,"PREFIX".equals(r.type)?"WHITELIST_PREFIX":"WHITELIST");
+                    reload[0].run(); refresh();
+                }).show();
             });
         };
         search.addTextChangedListener(new android.text.TextWatcher(){
@@ -184,8 +190,7 @@ public class MainActivity extends Activity {
             public void onTextChanged(CharSequence s,int st,int before,int count){reload[0].run();}
             public void afterTextChanged(android.text.Editable e){}
         });
-        reload[0].run();
-        dialog.show();
+        reload[0].run(); dialog.show();
     }
 
     private void showHistory(){
@@ -237,7 +242,7 @@ public class MainActivity extends Activity {
                     String[] a=line.split(",");
                     if(a.length>=2){
                         String t=a[0].trim(), value=NumberUtils.normalize(a[1]);
-                        if((t.equals("PREFIX")||t.equals("EXACT")||t.equals("WHITELIST"))&&!value.isEmpty()&&db.addRule(value,t)) added++;
+                        if((t.equals("PREFIX")||t.equals("EXACT")||t.equals("WHITELIST")||t.equals("WHITELIST_PREFIX"))&&!value.isEmpty()&&db.addRule(value,t)) added++;
                     }
                 }
                 toast("Imported "+added+" new rules"); refresh();

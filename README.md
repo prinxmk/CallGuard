@@ -87,3 +87,12 @@ The Android 9 compatibility build now declares the ACTION_DIAL intent with the `
 - Blacklist rules are stored as `PREFIX` or `EXACT`, while the UI labels the group `BLACKLIST`.
 - v1.2.3 fixes blacklist listing/counting and makes the RuleEngine retrieve both PREFIX and EXACT blacklist rules.
 - This fixes Test a Number and live screening decisions that previously saw an empty blacklist.
+
+
+## v1.2.4 stability and rule-management patch
+- Stopped the custom InCallService from launching its own incoming-call activity; the service remains declared for Android 9 default-phone compatibility, while the system/OEM call UI remains in control.
+- Hardened CallScreeningService and rule evaluation so database/contacts errors fail open instead of crashing the telecom callback.
+- Database migration allows the same normalized value to exist as both a blacklist and whitelist rule, with whitelist precedence.
+- Whitelist now supports both exact numbers and prefixes.
+- Browse Blacklist and Browse Whitelist now have Add, search, enable/disable, delete, and whitelist actions.
+- Search supports the stored normalized number/prefix representation.

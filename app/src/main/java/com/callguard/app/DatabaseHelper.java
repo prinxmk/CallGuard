@@ -7,18 +7,33 @@ import java.util.*;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "callguard.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
 
     public DatabaseHelper(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE rules (id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL UNIQUE, type TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL)");
+        db.execSQL("CREATE TABLE rules (id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL, type TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL)");
         db.execSQL("CREATE TABLE blocked_calls (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, reason TEXT, timestamp INTEGER NOT NULL)");
         db.execSQL("CREATE INDEX idx_rules_value ON rules(value)");
         db.execSQL("CREATE INDEX idx_rules_type ON rules(type)");
+        db.execSQL("CREATE UNIQUE INDEX idx_rules_value_type ON rules(value,type)");
     }
 
-    @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {}
+    @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if (oldVersion < 2) {
+            db.beginTransaction();
+            try {
+                db.execSQL("CREATE TABLE rules_new (id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL, type TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL)");
+                db.execSQL("INSERT OR IGNORE INTO rules_new(id,value,type,enabled,created_at) SELECT id,value,type,enabled,created_at FROM rules");
+                db.execSQL("DROP TABLE rules");
+                db.execSQL("ALTER TABLE rules_new RENAME TO rules");
+                db.execSQL("CREATE INDEX idx_rules_value ON rules(value)");
+                db.execSQL("CREATE INDEX idx_rules_type ON rules(type)");
+                db.execSQL("CREATE UNIQUE INDEX idx_rules_value_type ON rules(value,type)");
+                db.setTransactionSuccessful();
+            } finally { db.endTransaction(); }
+        }
+    }
 
     public boolean addRule(String value, String type) {
         SQLiteDatabase db=getWritableDatabase();
@@ -36,22 +51,25 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public ArrayList<Rule> getRules(String type, String search) {
         ArrayList<Rule> out=new ArrayList<>();
-        Cursor c;
+        String q=search==null?"":search.trim();
+        String normalized=NumberUtils.normalize(q);
+        String local234=normalized;
+        if(local234.startsWith("234") && local234.length()>3) local234="0"+local234.substring(3);
+        String where; String[] args;
         if ("BLACKLIST".equals(type)) {
-            // Blacklist entries are stored with their actual rule type
-            // (PREFIX or EXACT), not with the label BLACKLIST.
-            c=getReadableDatabase().query(
-                "rules", null,
-                "type IN (?,?) AND value LIKE ?",
-                new String[]{"PREFIX","EXACT","%"+search+"%"},
-                null, null, "id DESC");
+            where="type IN (?,?)";
+            if(q.isEmpty()) args=new String[]{"PREFIX","EXACT"};
+            else { where += " AND (value LIKE ? OR value LIKE ? OR value LIKE ?)"; args=new String[]{"PREFIX","EXACT","%"+q+"%","%"+normalized+"%","%"+local234+"%"}; }
+        } else if ("WHITELIST".equals(type)) {
+            where="type IN (?,?)";
+            if(q.isEmpty()) args=new String[]{"WHITELIST","WHITELIST_PREFIX"};
+            else { where += " AND (value LIKE ? OR value LIKE ? OR value LIKE ?)"; args=new String[]{"WHITELIST","WHITELIST_PREFIX","%"+q+"%","%"+normalized+"%","%"+local234+"%"}; }
         } else {
-            c=getReadableDatabase().query(
-                "rules", null,
-                "type=? AND value LIKE ?",
-                new String[]{type,"%"+search+"%"},
-                null, null, "id DESC");
+            where="type=?";
+            if(q.isEmpty()) args=new String[]{type};
+            else { where += " AND (value LIKE ? OR value LIKE ? OR value LIKE ?)"; args=new String[]{type,"%"+q+"%","%"+normalized+"%","%"+local234+"%"}; }
         }
+        Cursor c=getReadableDatabase().query("rules",null,where,args,null,null,"id DESC");
         while(c.moveToNext()) out.add(new Rule(c.getLong(c.getColumnIndexOrThrow("id")),c.getString(c.getColumnIndexOrThrow("value")),c.getString(c.getColumnIndexOrThrow("type")),c.getInt(c.getColumnIndexOrThrow("enabled"))==1));
         c.close(); return out;
     }
@@ -82,6 +100,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             c=getReadableDatabase().rawQuery(
                 "SELECT COUNT(*) FROM rules WHERE type IN (?,?)",
                 new String[]{"PREFIX","EXACT"});
+        } else if ("WHITELIST".equals(type)) {
+            c=getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM rules WHERE type IN (?,?)",
+                new String[]{"WHITELIST","WHITELIST_PREFIX"});
         } else {
             c=getReadableDatabase().rawQuery(
                 "SELECT COUNT(*) FROM rules WHERE type=?",
