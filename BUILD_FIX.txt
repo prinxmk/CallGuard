@@ -1,0 +1,9 @@
+CallGuard build correction
+
+This package fixes the v1.3.0 compilation errors:
+1. MainActivity.java imports android.graphics.drawable.GradientDrawable.
+2. The android.provider.Settings import conflict was removed from MainActivity.java.
+3. Android system settings references are explicitly qualified as android.provider.Settings.
+4. CallGuard's own Settings.java methods blockMessages, setBlockMessages, blockUnknown and setBlockUnknown are preserved.
+
+Upload the contents of this folder to the GitHub repository and run the existing build workflow.
