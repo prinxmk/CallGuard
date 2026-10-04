@@ -44,7 +44,6 @@ public class MainActivity extends Activity {
         findViewById(R.id.btnTest).setOnClickListener(v->showTestDialog());
         findViewById(R.id.btnExport).setOnClickListener(v->exportRules());
         findViewById(R.id.btnImport).setOnClickListener(v->importRules());
-        findViewById(R.id.btnDiagnostics).setOnClickListener(v->showDiagnostics());
         refresh();
     }
 
