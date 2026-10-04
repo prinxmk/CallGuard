@@ -1,4 +1,4 @@
-# CallGuard 1.3.0
+# CallGuard 1.3.1
 
 Android 9+ call and message protection build.
 
@@ -17,3 +17,7 @@ Reliable SMS interception/removal requires CallGuard to be the device's default 
 
 ## Build
 Use the included GitHub Actions workflow or run `./gradlew assembleDebug` with Android Gradle Plugin 8.6.1 / compile SDK 35.
+
+
+### SMS role support in v1.3.1
+CallGuard now declares the Android SMS role requirements for SMS_DELIVER, WAP_PUSH_DELIVER (MMS), and SENDTO intents. On Android versions that expose the SMS role, CallGuard can be selected as the default SMS app. The built-in composer can send SMS using SmsManager. Incoming SMS are filtered before being stored in the SMS inbox when message protection is enabled. MMS delivery is accepted by the role-required receiver without attempting to replace Android's provider-level MMS storage.

@@ -37,7 +37,7 @@ public class SmsReceiver extends BroadcastReceiver {
                 String sender=key.split("\\|",2)[0]; String body=parts.get(key).toString();
                 CallDecision d=RuleEngine.decideMessage(context,sender);
                 if(d.block && Settings.blockMessages(context) && SmsRoleHelper.isDefault(context)){
-                    if(SmsRoleHelper.isDefault(context)) db.logBlockedMessage(NumberUtils.normalize(sender),body,d.reason);
+                    db.logBlockedMessage(NumberUtils.normalize(sender),body,d.reason);
                     NotificationHelper.showBlocked(context,"Message blocked","Blocked SMS from "+sender+" • "+d.reason, 3000+(int)(System.currentTimeMillis()%1000));
                     if(isOrderedBroadcast()) abortBroadcast();
                 } else if(Telephony.Sms.Intents.SMS_DELIVER_ACTION.equals(action) && SmsRoleHelper.isDefault(context)) {
