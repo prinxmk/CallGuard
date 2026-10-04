@@ -81,3 +81,9 @@ This build adds an Android 9 diagnostic screen. Android's public `ROLE_CALL_SCRE
 ## Android 9 dialer eligibility patch (v1.2.2)
 
 The Android 9 compatibility build now declares the ACTION_DIAL intent with the `tel` URI scheme in addition to the generic ACTION_DIAL declaration. This improves compatibility with Android 9/OEM default-phone-app selection logic that identifies eligible dialer applications from the dial intent filter. Android's documented default phone requirements include ACTION_DIAL handling and a fully implemented InCallService.
+
+
+## v1.2.3 rule-engine fix
+- Blacklist rules are stored as `PREFIX` or `EXACT`, while the UI labels the group `BLACKLIST`.
+- v1.2.3 fixes blacklist listing/counting and makes the RuleEngine retrieve both PREFIX and EXACT blacklist rules.
+- This fixes Test a Number and live screening decisions that previously saw an empty blacklist.

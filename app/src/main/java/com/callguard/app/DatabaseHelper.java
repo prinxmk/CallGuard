@@ -36,7 +36,22 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public ArrayList<Rule> getRules(String type, String search) {
         ArrayList<Rule> out=new ArrayList<>();
-        Cursor c=getReadableDatabase().query("rules",null,"type=? AND value LIKE ?",new String[]{type,"%"+search+"%"},null,null,"id DESC");
+        Cursor c;
+        if ("BLACKLIST".equals(type)) {
+            // Blacklist entries are stored with their actual rule type
+            // (PREFIX or EXACT), not with the label BLACKLIST.
+            c=getReadableDatabase().query(
+                "rules", null,
+                "type IN (?,?) AND value LIKE ?",
+                new String[]{"PREFIX","EXACT","%"+search+"%"},
+                null, null, "id DESC");
+        } else {
+            c=getReadableDatabase().query(
+                "rules", null,
+                "type=? AND value LIKE ?",
+                new String[]{type,"%"+search+"%"},
+                null, null, "id DESC");
+        }
         while(c.moveToNext()) out.add(new Rule(c.getLong(c.getColumnIndexOrThrow("id")),c.getString(c.getColumnIndexOrThrow("value")),c.getString(c.getColumnIndexOrThrow("type")),c.getInt(c.getColumnIndexOrThrow("enabled"))==1));
         c.close(); return out;
     }
@@ -61,7 +76,17 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public int countRules(String type) {
-        Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM rules WHERE type=?",new String[]{type});
+        Cursor c;
+        if ("BLACKLIST".equals(type)) {
+            // Blacklist entries are stored as PREFIX or EXACT.
+            c=getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM rules WHERE type IN (?,?)",
+                new String[]{"PREFIX","EXACT"});
+        } else {
+            c=getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM rules WHERE type=?",
+                new String[]{type});
+        }
         c.moveToFirst(); int n=c.getInt(0); c.close(); return n;
     }
 
