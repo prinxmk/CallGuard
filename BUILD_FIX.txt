@@ -7,3 +7,8 @@ This package fixes the v1.3.0 compilation errors:
 4. CallGuard's own Settings.java methods blockMessages, setBlockMessages, blockUnknown and setBlockUnknown are preserved.
 
 Upload the contents of this folder to the GitHub repository and run the existing build workflow.
+
+
+CallGuard v1.3.2 SMS eligibility correction
+
+This version adds the Android default-SMS application eligibility components: RECEIVE_MMS/SEND_MMS permissions and a RESPOND_VIA_MESSAGE service protected by SEND_RESPOND_VIA_MESSAGE. The service supports Android's "respond via message" flow and is included so Android 9 can recognize CallGuard as an eligible SMS handler.
