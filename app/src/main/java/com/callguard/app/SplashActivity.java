@@ -27,8 +27,9 @@ public class SplashActivity extends Activity {
         TextView name=new TextView(this); name.setText("CallGuard"); name.setTextColor(Color.WHITE); name.setTextSize(34); name.setTypeface(Typeface.DEFAULT,Typeface.BOLD); name.setGravity(Gravity.CENTER); name.setPadding(0,18,0,4); root.addView(name);
         TextView ver=new TextView(this); ver.setText("Version 1.4.0"); ver.setTextColor(Color.rgb(190,215,245)); ver.setTextSize(16); ver.setGravity(Gravity.CENTER); root.addView(ver);
         TextView by=new TextView(this); by.setText("By Prince Michael Adejoh"); by.setTextColor(Color.rgb(190,215,245)); by.setTextSize(15); by.setGravity(Gravity.CENTER); by.setPadding(0,12,0,0); root.addView(by);
+        TextView authorsNo=new TextView(this); authorsNo.setText("+234 803 766 3916"); authorsNo.setTextColor(Color.rgb(190,215,245)); authorsNo.setTextSize(16); authorsNo.setGravity(Gravity.CENTER); authorsNo.setPadding(0,12,0,0); root.addView(authorsNo);
         setContentView(root);
         AnimationSet a=new AnimationSet(true); a.addAnimation(new AlphaAnimation(0f,1f)); a.addAnimation(new ScaleAnimation(.82f,1f,.82f,1f,1,0.5f,1,0.5f)); a.setDuration(800); icon.startAnimation(a); name.startAnimation(a);
-        new Handler().postDelayed(()->{startActivity(new Intent(this,MainActivity.class)); finish(); overridePendingTransition(android.R.anim.fade_in,android.R.anim.fade_out);},1800);
+        new Handler().postDelayed(()->{startActivity(new Intent(this,MainActivity.class)); finish(); overridePendingTransition(android.R.anim.fade_in,android.R.anim.fade_out);},2000);
     }
 }
