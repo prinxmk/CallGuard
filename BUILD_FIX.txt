@@ -1,14 +1,1 @@
-CallGuard build correction
-
-This package fixes the v1.3.0 compilation errors:
-1. MainActivity.java imports android.graphics.drawable.GradientDrawable.
-2. The android.provider.Settings import conflict was removed from MainActivity.java.
-3. Android system settings references are explicitly qualified as android.provider.Settings.
-4. CallGuard's own Settings.java methods blockMessages, setBlockMessages, blockUnknown and setBlockUnknown are preserved.
-
-Upload the contents of this folder to the GitHub repository and run the existing build workflow.
-
-
-CallGuard v1.3.2 SMS eligibility correction
-
-This version adds the Android default-SMS application eligibility components: RECEIVE_MMS/SEND_MMS permissions and a RESPOND_VIA_MESSAGE service protected by SEND_RESPOND_VIA_MESSAGE. The service supports Android's "respond via message" flow and is included so Android 9 can recognize CallGuard as an eligible SMS handler.
+CallGuard v1.4.0. Core app features preserved. Monetization hub is a transparent integration foundation, not live payments/ads. Configure provider accounts and community API as described in README.md before public release.

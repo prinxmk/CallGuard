@@ -1,0 +1,6 @@
+<?php
+require __DIR__ . '/common.php'; require_key();
+$d = json_body(); $n = phone_number(isset($d['number']) ? $d['number'] : ''); $cat = isset($d['category']) ? $d['category'] : ''; if (!in_array($cat, ['spam','business','safe'], true)) respond(400, ['error'=>'Invalid category']);
+$ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'unknown'; $ipHash = hash_hmac('sha256', $ip, $config['hash_salt']); $pdo = db(); $day = date('Y-m-d');
+try { $pdo->beginTransaction(); $q = $pdo->prepare('SELECT report_count FROM api_rate_limits WHERE ip_hash=? AND day_key=? FOR UPDATE'); $q->execute([$ipHash,$day]); $count = $q->fetchColumn(); if ($count === false) { $pdo->prepare('INSERT INTO api_rate_limits(ip_hash,day_key,report_count) VALUES(?,?,0)')->execute([$ipHash,$day]); $count = 0; } if ((int)$count >= (int)$config['daily_report_limit']) { $pdo->rollBack(); respond(429, ['error'=>'Daily report limit reached']); } $pdo->prepare('UPDATE api_rate_limits SET report_count=report_count+1 WHERE ip_hash=? AND day_key=?')->execute([$ipHash,$day]); $pdo->prepare('INSERT INTO number_reports(phone_hash,category) VALUES(?,?)')->execute([hash_number($n),$cat]); $pdo->commit(); } catch (Exception $e) { if ($pdo->inTransaction()) $pdo->rollBack(); respond(500, ['error'=>'Could not save report']); }
+respond(201, ['ok'=>true]);
